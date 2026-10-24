@@ -208,8 +208,8 @@ void test_geometry() {
 }
 
 int main(int argc, char** argv) try {
-    require(argc <= 2, "Usage: ./m1_box_checkpoint [checkpoint_path]");
-    const std::string path = (argc == 2) ? argv[1] : "m1_checkpoint.txt";
+    require(argc <= 2, "Usage: ./checkpoints/m1_box_checkpoint [checkpoint_path]");
+    const std::string path = (argc == 2) ? argv[1] : "./checkpoints/m1_checkpoint.txt";
     test_geometry();
     std::cout << "PASS: face, edge, corner, half-box, multi-box and wrapping checks\n";
 
