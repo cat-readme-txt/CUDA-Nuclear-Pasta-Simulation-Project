@@ -1,5 +1,5 @@
 // Minimal G1: FP64, one CUDA thread per particle, full all-pairs forces.
-// Build: nvcc -O2 -std=c++17 --fmad=false pasta_g1_simple.cu -o pasta_g1
+// Build: nvcc -O2 -std=c++17 --fmad=false src/pasta_g1.cu -o bin/pasta_g1
 // Run:   ./pasta_g1 [N|M1-checkpoint.txt] [cutoff] [repeats]
 // CPU only: g++ -x c++ -O2 -std=c++17 pasta_g1_simple.cu -o pasta_cpu
 
