@@ -1,0 +1,27 @@
+\documentclass{standalone}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+
+\begin{document}
+\pgfplotstableread[col sep=comma]{checkpoints/m3_energy_scaling.csv}\sweepdata
+\pgfplotstablegetelem{1}{epsilon}\of{\sweepdata}
+\edef\epsilonatone{\pgfplotsretval}
+\begin{tikzpicture}
+\begin{loglogaxis}[
+  width=12cm,
+  height=8cm,
+  xlabel={Timestep $\Delta t$ (fm/$c$)},
+  ylabel={Normalized RMS energy error $\varepsilon$},
+  grid=both,
+  legend pos=north west,
+]
+\addplot+[only marks, mark=*, blue]
+  table[x=dt, y=epsilon, col sep=comma]
+  {checkpoints/m3_energy_scaling.csv};
+\addlegendentry{Measured NVE error, $N=200$}
+\addplot+[red, thick, mark=none, domain=0.015625:1, samples=2]
+  {\epsilonatone*x^2};
+\addlegendentry{Slope-2 reference, anchored at $\Delta t=1$}
+\end{loglogaxis}
+\end{tikzpicture}
+\end{document}

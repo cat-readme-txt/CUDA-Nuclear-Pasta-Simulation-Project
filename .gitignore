@@ -1,3 +1,4 @@
 *.txt
 bin/*
 checkpoints/*
+.DS_Store

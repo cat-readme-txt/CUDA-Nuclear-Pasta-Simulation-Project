@@ -1,7 +1,7 @@
 // Minimal G1: FP64, one CUDA thread per particle, full all-pairs forces.
 // Build: nvcc -O2 -std=c++17 --fmad=false src/pasta_g1.cu -o bin/pasta_g1
-// Run:   ./pasta_g1 [N|M1-checkpoint.txt] [cutoff] [repeats]
-// CPU only: g++ -x c++ -O2 -std=c++17 pasta_g1_simple.cu -o pasta_cpu
+// Run:   ./bin/pasta_g1 [N|checkpoint.txt] [cutoff] [repeats]
+// CPU only: c++ -x c++ -O2 -std=c++17 src/pasta_g1.cu -o pasta_g1_cpu
 
 #include <algorithm>
 #include <chrono>
@@ -28,7 +28,7 @@ void require(bool ok, const char* message) {
 
 struct Box {
     int n;
-    double L, cutoff = 6.0;
+    double L, cutoff = 6.0, lambda = 10.0;
     std::vector<double> xyz; // SoA: x[0..n), y[n..2n), z[2n..3n).
     std::vector<int> species; // 0 = neutron, 1 = proton.
 };
@@ -51,16 +51,27 @@ Box read_box(const std::string& source) {
         // Only positions/species are needed; read and discard velocities.
         std::ifstream file(source);
         file.imbue(std::locale::classic());
-        std::string magic, version;
+        std::string magic, version, thermostat;
         int protons;
         double saved_L, yp, dt, time, velocity;
         unsigned long long step, seed;
         std::mt19937_64 saved_rng;
         file >> magic >> b.n >> protons;
-        require(file && magic == "M1_TEXT_V1", "Expected M1_TEXT_V1 checkpoint");
+        require(file && (magic == "M1_TEXT_V1" || magic == "PASTA_TEXT_V2"),
+                "Expected M1_TEXT_V1 or PASTA_TEXT_V2 checkpoint");
         require(b.n >= 2 && b.n <= 100000, "Invalid checkpoint N");
         file >> density >> saved_L >> yp >> b.cutoff >> dt >> time
-             >> step >> seed >> std::quoted(version) >> saved_rng;
+             >> step >> seed;
+        if (magic == "PASTA_TEXT_V2") {
+            double a, attraction, isospin, width, charge, mass, temperature;
+            file >> a >> attraction >> isospin >> width >> charge >> b.lambda
+                 >> mass >> temperature >> std::quoted(thermostat);
+            require(file && a == 110.0 && attraction == -26.0 &&
+                        isospin == 24.0 && width == 1.25 && charge == 1.44 &&
+                        mass == 939.0 && std::isfinite(b.lambda) && b.lambda > 0.0,
+                    "G1 only supports its default model parameters and positive lambda");
+        }
+        file >> std::quoted(version) >> saved_rng;
         require(file && std::isfinite(density) && density > 0, "Invalid checkpoint header");
         b.L = std::cbrt(b.n / density);
         require(std::isfinite(saved_L) && saved_L > 0 &&
@@ -100,11 +111,12 @@ HD double raw_factor(double r2, const Pair& p, const Model& m) {
          + p.K * exp(-r / m.lambda) * (1.0 / (m.lambda*r2) + 1.0 / (r2*r));
 }
 
-Model make_model(double cutoff, double L) {
+Model make_model(double cutoff, double L, double lambda) {
     require(std::isfinite(cutoff) && cutoff > 0 && cutoff <= L/2,
             "Require 0 < cutoff <= L/2; try N=200, cutoff=6");
     Model m;
     m.cutoff = cutoff;
+    m.lambda = lambda;
     for (int a = 0; a < 2; ++a) for (int b = 0; b < 2; ++b) {
         Pair p{a == b ? -2.0 : -50.0, a == 1 && b == 1 ? 1.44 : 0.0, 0.0};
         p.cutoff_force = cutoff * raw_factor(cutoff*cutoff, p, m);
@@ -213,7 +225,8 @@ void run_gpu(const Box& b, const Model& m, const std::vector<double>& cpu,
 int main(int argc, char** argv) try {
     require(argc <= 4, "Usage: ./pasta_g1 [N|M1-checkpoint] [cutoff] [repeats]");
     const Box b = read_box(argc > 1 ? argv[1] : "200");
-    const Model m = make_model(argc > 2 ? std::stod(argv[2]) : b.cutoff, b.L);
+    const Model m = make_model(argc > 2 ? std::stod(argv[2]) : b.cutoff,
+                               b.L, b.lambda);
     const int repeats = argc > 3 ? std::stoi(argv[3]) : 20;
     require(repeats > 0 && repeats <= 10000, "Require 1 <= repeats <= 10000");
     std::vector<double> cpu(3*b.n);
